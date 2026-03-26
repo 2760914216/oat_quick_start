@@ -26,13 +26,12 @@ class PublicKeyDto : public oatpp::DTO
     DTO_FIELD(String,owner);        //
     DTO_FIELD(String,key);          //
 	DTO_FIELD(String,algorithm);
-    DTO_FIELD(String,plaintext);    // receiver use key to encrypto it and send it back
 };
 
 class PublicKeyResponseDto:public oatpp::DTO
 {
     DTO_INIT(PublicKeyResponseDto, DTO)
-    DTO_FIELD(String,encryptedtext);
+    DTO_FIELD(String,key);
 };
 
 /* TODO - Add more DTOs here */

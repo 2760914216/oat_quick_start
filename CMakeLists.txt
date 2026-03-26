@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 find_package(OpenSSL  REQUIRED)
 find_package(oatpp          1.4.0 REQUIRED)
-find_package(oatpp-openssl  1.4.0 REQUIRED)
+# find_package(oatpp-openssl  1.4.0 REQUIRED)
 # find_package(SQLite3              REQUIRED)
 # find_package(oatpp-swagger  1.4.0 REQUIRED)
 # find_package(oatpp-sqlite   1.4.0 REQUIRED)
@@ -17,5 +17,5 @@ add_executable(oat_quick_start src/App.cpp)
 target_link_libraries(oat_quick_start 
         # Oat++
         PUBLIC oatpp::oatpp
-        PUBLIC oatpp::oatpp-openssl
+        # PUBLIC oatpp::oatpp-openssl
 )

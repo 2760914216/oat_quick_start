@@ -29,20 +29,20 @@ public:
         dto->CRC = "35c9bb";
         return createDtoResponse(Status::CODE_200, dto);
     }
-    ENDPOINT("PULL", "/tempfiles", publickey_transfer, BODY_DTO(Object<PublicKeyDto>, pubkey))
+    ENDPOINT("POST", "/api/submit-sensitive-info", publickey_transfer, BODY_DTO(Object<PublicKeyDto>, pubkey))
     {
         auto owner = pubkey->owner;
         auto key = pubkey->key;
         auto algorithm = pubkey->algorithm;
-        auto plaintxt = pubkey->plaintext;
         auto dto = PublicKeyResponseDto::createShared();
-        if (algorithm != "AES-256-CBC") // unsupported algorithm
+
+        if (algorithm == "RSA")
         {
-            dto->encryptedtext = plaintxt; // return plaintext
-                                           // retuen
+            dto->key = key; // send it back, double check
+			//TODO store key in db
+            return createDtoResponse(Status::CODE_200, dto);
         }
-        // TODO
-        return createDtoResponse(Status::CODE_200, dto);
+        return createDtoResponse(Status::CODE_400, dto);
     }
     // TODO Insert Your endpoints here !!!
 };
