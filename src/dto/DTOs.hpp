@@ -22,18 +22,61 @@ class MessageDto : public oatpp::DTO
 
 class PublicKeyDto : public oatpp::DTO
 {
-    DTO_INIT(PublicKeyDto,DTO)
-    DTO_FIELD(String,owner);        //
-    DTO_FIELD(String,key);          //
-	DTO_FIELD(String,algorithm);
+    DTO_INIT(PublicKeyDto, DTO)
+    DTO_FIELD(String, owner); //
+    DTO_FIELD(String, key);   //
+    DTO_FIELD(String, algorithm);
 };
 
-class PublicKeyResponseDto:public oatpp::DTO
+class PublicKeyResponseDto : public oatpp::DTO
 {
     DTO_INIT(PublicKeyResponseDto, DTO)
-    DTO_FIELD(String,key);
+    DTO_FIELD(String, key);
 };
 
+class SymmetricKeyDto : public oatpp::DTO
+{
+    DTO_INIT(SymmetricKeyDto, DTO)
+    DTO_FIELD(String, key);
+};
+
+class SymmetricKeyResponseDto : public oatpp::DTO
+{
+    DTO_INIT(SymmetricKeyResponseDto, DTO)
+    DTO_FIELD(String, key);
+};
+
+class UploadInitRequestDto : public oatpp::DTO
+{
+    DTO_INIT(UploadInitRequestDto, DTO)
+    DTO_FIELD(String, filename);        // 文件名
+    DTO_FIELD(String, filetype);        // 文件类型
+    DTO_FIELD(Int64, filesize);         // 文件大小
+    DTO_FIELD(String, encryptedSymKey); // 用服务器公钥加密的对称密钥 (Base64 编码)
+};
+
+class UploadInitResponseDto : public oatpp::DTO
+{
+    DTO_INIT(UploadInitResponseDto, DTO)
+    DTO_FIELD(String, token);    // 上传令牌
+    DTO_FIELD(Int64, chunkSize); // 建议的分块大小
+    DTO_FIELD(String, message);  // 响应消息
+};
+
+class UploadChunkRequestDto : public oatpp::DTO
+{
+    DTO_INIT(UploadChunkRequestDto, DTO)
+    DTO_FIELD(Int32, chunkIndex);      // 分块索引
+    DTO_FIELD(String, encryptedChunk); // 用对称密钥加密的分块数据 (Base64 编码)
+    DTO_FIELD(String, chunkHash);      // 分块的哈希值 (可选，用于验证)
+};
+
+class UploadCompleteResponseDto : public oatpp::DTO
+{
+    DTO_INIT(UploadCompleteResponseDto, DTO)
+    DTO_FIELD(String, fileId);  // 文件 ID
+    DTO_FIELD(String, message); // 完成消息
+};
 /* TODO - Add more DTOs here */
 
 /* End DTO code-generation */

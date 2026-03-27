@@ -3,36 +3,10 @@
 #include "controller/MyController.hpp"
 #include "oatpp/network/Server.hpp"
 
+#include <oatpp/Environment.hpp>
 #include <oatpp/base/Log.hpp>
+#include <openssl/ssl.h>
 
-// #include "oatpp-openssl/Connection.hpp"
-
-// /**
-//  * Custom Request Handler
-//  */
-// class Handler : public oatpp::web::server::HttpRequestHandler
-// {
-// private:
-//     /* Inject object mapper component */
-//     OATPP_COMPONENT(std::shared_ptr<oatpp::data::mapping::ObjectMapper>, m_objectMapper);
-
-// public:
-//     /**
-//      * Handle incoming request and return outgoing response.
-//      */
-//     std::shared_ptr<OutgoingResponse> handle(const std::shared_ptr<IncomingRequest>& request) override
-//     {
-//         auto message = MessageDto::createShared();
-//         message->statusCode = 1024;
-//         message->message = "Hello DTO!";
-//         return ResponseFactory::createResponse(Status::CODE_200, message, m_objectMapper);
-//     }
-// };
-
-
-const char* crtFile = "path/to/file.crt";
-const char* pemFile = "path/to/file.pem";
-// auto config = oatpp::libressl::Config::createDefaultServerConfigShared(crtFile, pemFile /* private key */);
 
 void run()
 {
@@ -53,8 +27,8 @@ void run()
     /* Get connection handler component */
     OATPP_COMPONENT(std::shared_ptr<oatpp::network::ConnectionHandler>, connectionHandler);
 
-
     /* Get connection provider component */
+
     OATPP_COMPONENT(std::shared_ptr<oatpp::network::ServerConnectionProvider>, connectionProvider);
 
     /* Create server which takes provided TCP connections and passes them to HTTP connection handler */
@@ -73,6 +47,7 @@ int main(int argc, char** argv)
 {
 
     /* Init oatpp Environment */
+    OPENSSL_init_ssl(OPENSSL_INIT_SSL_DEFAULT, nullptr);
     oatpp::Environment::init();
 
     /* Run App */
@@ -80,6 +55,5 @@ int main(int argc, char** argv)
 
     /* Destroy oatpp Environment */
     oatpp::Environment::destroy();
-
     return 0;
 }

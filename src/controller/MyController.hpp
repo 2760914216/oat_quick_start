@@ -6,6 +6,7 @@
 #include "oatpp/macro/component.hpp"
 #include "oatpp/web/server/api/ApiController.hpp"
 
+
 #include OATPP_CODEGEN_BEGIN(ApiController) ///< Begin Codegen
 
 /**
@@ -35,16 +36,33 @@ public:
         auto key = pubkey->key;
         auto algorithm = pubkey->algorithm;
         auto dto = PublicKeyResponseDto::createShared();
-
+        dto->key = "";
         if (algorithm == "RSA")
         {
             dto->key = key; // send it back, double check
-			//TODO store key in db
+            /*
+             TODO store key in db
+            */
             return createDtoResponse(Status::CODE_200, dto);
         }
         return createDtoResponse(Status::CODE_400, dto);
     }
-    // TODO Insert Your endpoints here !!!
+    ENDPOINT("POST", "/api/submit-sensitive-info", symmetrickey_transfer, BODY_DTO(Object<SymmetricKeyDto>, symkey))
+    {
+        auto key = symkey->key;
+        auto dto = SymmetricKeyResponseDto::createShared();
+        dto->key = key;
+        return createDtoResponse(Status::CODE_200, dto);
+    }
+    ENDPOINT("GET", "/api/get-public-key", server_publickey_transfer)
+    {
+        auto dto = PublicKeyDto::createShared();
+        dto->owner = "server";
+        // TODO get public key from db
+        //  dto->algorithm=
+        //  dto->key=
+        return createDtoResponse(Status::CODE_200, dto);
+    }
 };
 
 #include OATPP_CODEGEN_END(ApiController) ///< End Codegen
