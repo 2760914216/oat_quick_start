@@ -48,8 +48,8 @@ public:
     (
         []
         {
-            // const char* pemFile = "/home/ruruka/Documents/srccode/oat_quick_start/ca/private_key.pem";
-            // const char* crtFile = "/home/ruruka/Documents/srccode/oat_quick_start/ca/certificate.crt";
+            const char* pemFile = "/home/ruruka/Documents/srccode/oat_quick_start/ca/private_key.pem";
+            const char* crtFile = "/home/ruruka/Documents/srccode/oat_quick_start/ca/certificate.crt";
 
             // std::cout << "[DEBUG] Checking files..." << std::endl;
             // std::cout << "[DEBUG] PEM exists: " << fileExists(pemFile) << std::endl;
@@ -63,7 +63,7 @@ public:
             // std::cout << "[DEBUG] Creating config with createShared()..." << std::endl;
 
             // use createShared rather then createDefaultServerConfigShared
-            auto config = oatpp::openssl::Config::createShared();
+            auto config = oatpp::openssl::Config::createDefaultServerConfigShared(crtFile,pemFile);
             // std::cout << "[DEBUG] Config created successfully!" << std::endl;
             return config;
         }());

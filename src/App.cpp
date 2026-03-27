@@ -7,6 +7,7 @@
 #include <oatpp/base/Log.hpp>
 #include <openssl/ssl.h>
 
+constexpr char AppName[] ="Ciallo";
 
 void run()
 {
@@ -16,9 +17,6 @@ void run()
 
     /* Get router component */
     OATPP_COMPONENT(std::shared_ptr<oatpp::web::server::HttpRouter>, router);
-
-    // /* Route GET - "/hello" requests to Handler */
-    // router->route("GET", "/hello", std::make_shared<Handler>());
 
     /* Create MyController and add all of its endpoints to router */
     auto myController = std::make_shared<MyController>();
@@ -35,19 +33,18 @@ void run()
     oatpp::network::Server server(connectionProvider, connectionHandler);
 
     /* Priny info about server port */
-    OATPP_LOGi("MyApp", "Server running on port {}...", connectionProvider->getProperty("port").toString());
+    OATPP_LOGi(AppName, "Server running on port {}...", connectionProvider->getProperty("port").toString());
 
     /* Run server */
-    server.run();
+    server.run(/*std::function<bool()> conditional: Return true to let the server continue, false to shut it down.*/);
 
-    // server.stop();
 }
 
 int main(int argc, char** argv)
 {
 
     /* Init oatpp Environment */
-    OPENSSL_init_ssl(OPENSSL_INIT_SSL_DEFAULT, nullptr);
+    // OPENSSL_init_ssl(OPENSSL_INIT_SSL_DEFAULT, nullptr);
     oatpp::Environment::init();
 
     /* Run App */
