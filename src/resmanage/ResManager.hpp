@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
@@ -26,6 +27,7 @@ public:
         Shaders,
         Font,
         Video,
+        Photo,
     };
 
     struct ResourceInfo
@@ -164,6 +166,14 @@ public:
         build_type_path_map();
     }
 
+    std::string generate_photo_id()
+    {
+        auto now = std::chrono::system_clock::now();
+        auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+        std::string id = std::to_string(timestamp) + "_" + std::to_string(rand() % 10000);
+        return id;
+    }
+
 private:
     ResManager() : basePath_("res/")
     {
@@ -211,7 +221,7 @@ private:
 
     static inline const std::unordered_map<ResourceType, std::string> typeNames_ = {
         {ResourceType::Texture, "Texture"}, {ResourceType::Model, "Model"}, {ResourceType::Audio, "Audio"}, {ResourceType::Config, "Config"},
-        {ResourceType::Shaders, "Shaders"}, {ResourceType::Font, "Font"},   {ResourceType::Video, "Video"},
+        {ResourceType::Shaders, "Shaders"}, {ResourceType::Font, "Font"},   {ResourceType::Video, "Video"}, {ResourceType::Photo, "Photo"},
     };
 
     std::string basePath_;

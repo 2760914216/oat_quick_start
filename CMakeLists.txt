@@ -17,16 +17,24 @@ endif()
 include_directories(src)
 include_directories(${OPENSSL_INCLUDE_DIR})
 
+set(AUTH_SOURCES
+    src/config/ConfigManager.cpp
+    src/auth/AuthManager.cpp
+    src/auth/JwtHelper.cpp
+    src/auth/TokenStore.cpp
+)
+
 add_executable(oat_quick_start 
     src/App.cpp
     src/resmanage/ResManager.cpp
+    ${AUTH_SOURCES}
 )
 
 target_link_libraries(oat_quick_start 
-        oatpp::oatpp
-        oatpp::oatpp-openssl
-        ssl
-        crypto
+    oatpp::oatpp
+    oatpp::oatpp-openssl
+    ssl
+    crypto
 )
 
 if(BUILD_TESTS)

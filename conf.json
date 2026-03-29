@@ -1,0 +1,16 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 1145
+  },
+  "jwt": {
+    "secret": "your-256-bit-secret-key-change-this-in-production",
+    "access_token_expire": 3600,
+    "refresh_token_expire": 604800
+  },
+  "admin": {
+    "username": "admin",
+    "password_hash": "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
+  },
+  "users": []
+}
