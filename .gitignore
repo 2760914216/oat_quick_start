@@ -1,0 +1,28 @@
+.vscode/
+src/encrypt/
+out/
+.clang-format
+next todo
+uploading recomandation.md
+ca/
+.gitignore
+CMakePresets.json
+opencode.jsonc
+.cache/
+
+# Build
+build/
+cmake-build-*/
+
+# Test resources
+res/
+test_res/
+
+# IDE
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
