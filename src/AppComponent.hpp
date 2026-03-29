@@ -2,7 +2,6 @@
 
 #include "oatpp/json/ObjectMapper.hpp"
 
-#include "oatpp/network/tcp/server/ConnectionProvider.hpp"
 #include "oatpp/web/server/HttpConnectionHandler.hpp"
 
 #include "oatpp/macro/component.hpp"

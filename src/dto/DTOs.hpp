@@ -52,6 +52,8 @@ class UploadInitRequestDto : public oatpp::DTO
     DTO_FIELD(String, filename);        // 文件名
     DTO_FIELD(String, filetype);        // 文件类型
     DTO_FIELD(Int64, filesize);         // 文件大小
+    DTO_FIELD(Int64, chunksize);        // 块大小
+    DTO_FIELD(Int64, chunkcount);       // 块数量
     DTO_FIELD(String, encryptedSymKey); // 用服务器公钥加密的对称密钥 (Base64 编码)
 };
 
@@ -68,7 +70,13 @@ class UploadChunkRequestDto : public oatpp::DTO
     DTO_INIT(UploadChunkRequestDto, DTO)
     DTO_FIELD(Int32, chunkIndex);      // 分块索引
     DTO_FIELD(String, encryptedChunk); // 用对称密钥加密的分块数据 (Base64 编码)
-    DTO_FIELD(String, chunkHash);      // 分块的哈希值 (可选，用于验证)
+    DTO_FIELD(String, chunkHash);      // 分块的哈希值
+};
+
+class UploadChunkResponseDto : public oatpp::DTO
+{
+    DTO_INIT(UploadChunkRequestDto, DTO)
+    DTO_FIELD(Int32, chunkIndex); // 分块索引
 };
 
 class UploadCompleteResponseDto : public oatpp::DTO

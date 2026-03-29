@@ -6,7 +6,6 @@
 #include "oatpp/macro/component.hpp"
 #include "oatpp/web/server/api/ApiController.hpp"
 
-
 #include OATPP_CODEGEN_BEGIN(ApiController) ///< Begin Codegen
 
 /**
@@ -22,11 +21,11 @@ public:
     MyController(OATPP_COMPONENT(std::shared_ptr<ObjectMapper>, objectMapper)) : oatpp::web::server::api::ApiController(objectMapper) {}
 
 public:
-    ENDPOINT("GET", "/hello", root)
+    ENDPOINT("GET", "/hello", hello)
     {
         auto dto = MessageDto::createShared();
         dto->statusCode = 200;
-        dto->message = "Hello World!";
+        dto->message = "Ciallo World!";
         dto->CRC = "35c9bb";
         return createDtoResponse(Status::CODE_200, dto);
     }
