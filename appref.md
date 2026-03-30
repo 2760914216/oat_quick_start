@@ -1,6 +1,6 @@
 # Ciallo HTTP Server API Reference
 
-基于 OATPP 框架的 C++ HTTP 服务器，使用 JWT 进行身份认证。
+基于 OATPP 框架的 C++ HTTPS 服务器，使用 JWT 进行身份认证，支持 SQLite 元数据存储。
 
 ## 一、API 路由总览
 
@@ -49,11 +49,12 @@
 | **是否需要认证** | 否 |
 | **请求头** | `Content-Type: application/json` |
 | **请求体 (JSON)** | |
-| ```json | |
-| {
+| ```json
+{
   "username": "string",
   "password": "string"
-} |
+}
+```
 | **成功响应** | `200 OK` |
 | **响应体** | `LoginResponseDto` |
 | **响应示例** | `{"access_token": "jwt...", "refresh_token": "jwt...", "expires_in": 3600, "username": "admin", "role": "admin"}` |
@@ -71,10 +72,11 @@
 | **是否需要认证** | 否 |
 | **请求头** | `Content-Type: application/json` |
 | **请求体 (JSON)** | |
-| ```json | |
-| {
+| ```json
+{
   "refresh_token": "string"
-} |
+}
+```
 | **成功响应** | `200 OK` |
 | **响应体** | `RefreshResponseDto` |
 | **响应示例** | `{"access_token": "jwt...", "expires_in": 3600}` |
@@ -128,11 +130,12 @@
 | **是否需要认证** | 是 (Bearer Token, 需 admin 角色) |
 | **请求头** | `Authorization: Bearer <token>`<br>`Content-Type: application/json` |
 | **请求体 (JSON)** | |
-| ```json | |
-| {
+| ```json
+{
   "username": "string",
   "password": "string"
-} |
+}
+```
 | **成功响应** | `201 Created` |
 | **响应体** | `UserDto` |
 | **响应示例** | `{"username": "newuser", "created_at": null}` |
@@ -159,65 +162,158 @@
 
 ### 3. PhotoController (照片管理控制器)
 
+照片存储使用 SQLite 数据库存储元数据，本地文件系统存储文件。
+
 #### 3.1 获取照片列表
 
 | 属性 | 值 |
 |------|-----|
 | **HTTP 方法** | `GET` |
 | **路由路径** | `/api/photos` |
-| **功能描述** | 获取用户照片列表 |
+| **功能描述** | 获取当前用户的照片列表 |
 | **是否需要认证** | 是 (Bearer Token) |
 | **请求头** | `Authorization: Bearer <token>` |
 | **请求参数** | 无 |
 | **成功响应** | `200 OK` |
 | **响应体** | `PhotoListDto` |
-| **响应示例** | `{"photos": [{"id": "1", "filename": "photo.jpg", "size": 1024, "created_at": "2024-01-01"}]}` |
+| **响应示例** | `{"photos": [{"id": "123456_7890", "filename": "photo.jpg", "size": 1024, "created_at": "2024-01-01 12:00:00"}]}` |
 | **错误响应** | `401 Unauthorized` - 未认证 |
 
 ---
 
-#### 3.2 上传照片
+#### 3.2 简单上传照片
 
 | 属性 | 值 |
 |------|-----|
 | **HTTP 方法** | `POST` |
 | **路由路径** | `/api/photos/upload` |
-| **功能描述** | 上传照片 (当前为 stub 实现) |
+| **功能描述** | 上传照片到服务器（支持最大 100MB） |
 | **是否需要认证** | 是 (Bearer Token) |
-| **请求头** | `Authorization: Bearer <token>` |
-| **请求体** | 待定 (文件上传) |
+| **请求头** | `Authorization: Bearer <token>`<br>`Content-Type: image/*` |
 | **成功响应** | `201 Created` |
 | **响应体** | `UploadResponseDto` |
-| **响应示例** | `{"id": "uuid", "filename": "photo.jpg", "message": "Photo upload endpoint (stub)"}` |
+| **响应示例** | `{"id": "123456_7890", "filename": "upload_123456_7890.jpg", "message": "Photo uploaded successfully"}` |
+| **错误响应** | `400 Bad Request` - 无 Content-Length 或文件大小无效<br>`401 Unauthorized` - 未认证<br>`500 Internal Server Error` - 保存失败 |
 
 ---
 
-#### 3.3 获取单个照片
+#### 3.3 初始化分块上传
+
+| 属性 | 值 |
+|------|-----|
+| **HTTP 方法** | `POST` |
+| **路由路径** | `/api/photos/init` |
+| **功能描述** | 初始化分块上传，返回上传令牌 |
+| **是否需要认证** | 是 (Bearer Token) |
+| **请求头** | `Authorization: Bearer <token>`<br>`Content-Type: application/json` |
+| **请求体 (JSON)** | |
+| ```json
+{
+  "filename": "string",
+  "filesize": 1024000,
+  "chunksize": 102400,
+  "chunkcount": 10,
+  "encryptedSymKey": "base64..."
+}
+```
+| **成功响应** | `200 OK` |
+| **响应体** | `UploadInitResponseDto` |
+| **响应示例** | `{"token": "session_id", "chunkSize": 1048576, "message": "Upload session created"}` |
+
+---
+
+#### 3.4 上传分块
+
+| 属性 | 值 |
+|------|-----|
+| **HTTP 方法** | `POST` |
+| **路由路径** | `/api/photos/chunk` |
+| **功能描述** | 上传单个分块 |
+| **是否需要认证** | 是 (Bearer Token) |
+| **请求头** | `Authorization: Bearer <token>`<br>`X-Upload-Token: <token>`<br>`Content-Type: application/json` |
+| **请求体 (JSON)** | |
+| ```json
+{
+  "chunkIndex": 0,
+  "encryptedChunk": "base64...",
+  "chunkHash": "sha256..."
+}
+```
+| **成功响应** | `200 OK` |
+| **响应体** | `UploadChunkResponseDto` |
+| **响应示例** | `{"chunkIndex": 0}` |
+| **错误响应** | `400 Bad Request` - 缺少 token 或分块数据为空<br>`401 Unauthorized` - 未认证<br>`500 Internal Server Error` - 保存失败 |
+
+---
+
+#### 3.5 完成分块上传
+
+| 属性 | 值 |
+|------|-----|
+| **HTTP 方法** | `POST` |
+| **路由路径** | `/api/photos/complete` |
+| **功能描述** | 完成分块上传，合并所有分块 |
+| **是否需要认证** | 是 (Bearer Token) |
+| **请求头** | `Authorization: Bearer <token>`<br>`Content-Type: application/json` |
+| **请求体 (JSON)** | |
+| ```json
+{
+  "token": "session_id",
+  "filename": "photo.jpg",
+  "chunkCount": 10
+}
+```
+| **成功响应** | `200 OK` |
+| **响应体** | `UploadCompleteResponseDto` |
+| **响应示例** | `{"fileId": "123456_7890", "message": "Upload completed successfully"}` |
+| **错误响应** | `400 Bad Request` - token 或 filename 为空<br>`500 Internal Server Error` - 合并失败 |
+
+---
+
+#### 3.6 获取照片详情
 
 | 属性 | 值 |
 |------|-----|
 | **HTTP 方法** | `GET` |
 | **路由路径** | `/api/photos/{id}` |
-| **功能描述** | 获取指定照片详情 (尚未实现) |
+| **功能描述** | 获取指定照片的元数据 |
 | **是否需要认证** | 是 (Bearer Token) |
 | **路径参数** | `id` - 照片 ID |
-| **成功响应** | `501 Not Implemented` |
+| **成功响应** | `200 OK` |
+| **响应体** | `PhotoInfoDto` |
+| **响应示例** | `{"id": "123456_7890", "filename": "photo.jpg", "size": 1024, "created_at": "2024-01-01 12:00:00"}` |
+| **错误响应** | `401 Unauthorized` - 未认证<br>`403 Forbidden` - 无权访问<br>`404 Not Found` - 照片不存在 |
 
 ---
 
-#### 3.4 删除照片
+#### 3.7 下载照片文件
+
+| 属性 | 值 |
+|------|-----|
+| **HTTP 方法** | `GET` |
+| **路由路径** | `/api/photos/{id}/file` |
+| **功能描述** | 下载照片文件内容 |
+| **是否需要认证** | 是 (Bearer Token) |
+| **路径参数** | `id` - 照片 ID |
+| **成功响应** | `200 OK` |
+| **响应头** | `Content-Type: application/octet-stream`<br>`Content-Disposition: attachment; filename="photo.jpg"`<br>`Content-Length: <size>` |
+| **错误响应** | `401 Unauthorized` - 未认证<br>`403 Forbidden` - 无权访问<br>`404 Not Found` - 文件不存在 |
+
+---
+
+#### 3.8 删除照片
 
 | 属性 | 值 |
 |------|-----|
 | **HTTP 方法** | `DELETE` |
 | **路由路径** | `/api/photos/{id}` |
-| **功能描述** | 删除指定照片 (当前为 stub 实现) |
+| **功能描述** | 删除指定照片（同时删除文件和元数据） |
 | **是否需要认证** | 是 (Bearer Token) |
-| **请求头** | `Authorization: Bearer <token>` |
 | **路径参数** | `id` - 照片 ID |
 | **成功响应** | `200 OK` |
 | **响应体** | `DeleteResponseDto` |
-| **响应示例** | `{"message": "Photo delete endpoint (stub)"}` |
+| **响应示例** | `{"message": "Photo deleted successfully"}` |
+| **错误响应** | `401 Unauthorized` - 未认证<br>`403 Forbidden` - 无权访问<br>`404 Not Found` - 照片不存在 |
 
 ---
 
@@ -244,16 +340,17 @@
 |------|-----|
 | **HTTP 方法** | `POST` |
 | **路由路径** | `/api/submit-sensitive-info` |
-| **功能描述** | 提交 RSA 公钥 (当前为 stub 实现) |
+| **功能描述** | 提交 RSA 公钥 |
 | **是否需要认证** | 是 (Bearer Token) |
 | **请求头** | `Content-Type: application/json` |
 | **请求体 (JSON)** | `PublicKeyDto` |
-| ```json | |
-| {
+| ```json
+{
   "owner": "string",
   "key": "string",
   "algorithm": "RSA"
-} |
+}
+```
 | **成功响应** | `200 OK` |
 | **响应体** | `PublicKeyResponseDto` |
 | **响应示例** | `{"key": "..."}` |
@@ -271,10 +368,11 @@
 | **是否需要认证** | 是 (Bearer Token) |
 | **请求头** | `Content-Type: application/json` |
 | **请求体 (JSON)** | `SymmetricKeyDto` |
-| ```json | |
-| {
+| ```json
+{
   "key": "string"
-} |
+}
+```
 | **成功响应** | `200 OK` |
 | **响应体** | `SymmetricKeyResponseDto` |
 | **响应示例** | `{"key": "..."}` |
@@ -287,7 +385,7 @@
 |------|-----|
 | **HTTP 方法** | `GET` |
 | **路由路径** | `/api/get-public-key` |
-| **功能描述** | 获取服务器的公钥 (当前为 stub 实现) |
+| **功能描述** | 获取服务器的公钥 |
 | **是否需要认证** | 是 (Bearer Token) |
 | **成功响应** | `200 OK` |
 | **响应体** | `PublicKeyDto` |
@@ -314,6 +412,7 @@
 | `LogoutResponseDto` | message | String | 消息 |
 | `ErrorResponseDto` | error | String | 错误码 |
 | | message | String | 错误消息 |
+| | statusCode | Int32 | HTTP 状态码 |
 | `UserDto` | username | String | 用户名 |
 | | created_at | String | 创建时间 |
 | `UserListDto` | users | Vector\<UserDto\> | 用户列表 |
@@ -364,6 +463,9 @@
 | | encryptedChunk | String | 加密分块数据 |
 | | chunkHash | String | 分块哈希 |
 | `UploadChunkResponseDto` | chunkIndex | Int32 | 分块索引 |
+| `UploadCompleteRequestDto` | token | String | 上传令牌 |
+| | filename | String | 文件名 |
+| | chunkCount | Int64 | 分块总数 |
 | `UploadCompleteResponseDto` | fileId | String | 文件 ID |
 | | message | String | 消息 |
 
@@ -396,9 +498,53 @@ struct TokenPayload {
 - `POST /api/auth/login`
 - `POST /api/auth/refresh`
 
+### 权限说明
+
+| 角色 | 说明 |
+|------|------|
+| `admin` | 管理员，可访问所有 API |
+| `user` | 普通用户，仅可访问自己的照片 |
+
 ---
 
-## 五、API 汇总表
+## 五、存储架构
+
+### 目录结构
+
+```
+project_root/
+├── res/                          # 资源根目录
+│   ├── temp/                     # 临时上传目录
+│   ├── Photo/                    # 照片文件
+│   ├── Texture/                  # 纹理文件
+│   ├── Model/                    # 模型文件
+│   ├── Audio/                    # 音频文件
+│   ├── Video/                    # 视频文件
+│   └── ...
+├── database/                     # 数据库目录
+│   └── photo_metadata.db         # SQLite 元数据
+└── conf.json                     # 配置文件
+```
+
+### 元数据数据库
+
+使用 SQLite 存储照片元数据：
+
+```sql
+CREATE TABLE photos (
+    id TEXT PRIMARY KEY,
+    filename TEXT NOT NULL,
+    filepath TEXT NOT NULL,
+    size INTEGER DEFAULT 0,
+    owner TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT
+);
+```
+
+---
+
+## 六、API 汇总表
 
 | # | HTTP 方法 | 路由路径 | 功能 | 认证 | 管理员 |
 |---|-----------|----------|------|------|--------|
@@ -410,9 +556,45 @@ struct TokenPayload {
 | 6 | POST | `/api/users` | 创建用户 | 是 | 是 |
 | 7 | DELETE | `/api/users/{username}` | 删除用户 | 是 | 是 |
 | 8 | GET | `/api/photos` | 获取照片列表 | 是 | - |
-| 9 | POST | `/api/photos/upload` | 上传照片 | 是 | - |
-| 10 | GET | `/api/photos/{id}` | 获取照片详情 | 是 | - |
-| 11 | DELETE | `/api/photos/{id}` | 删除照片 | 是 | - |
-| 12 | GET | `/hello` | 欢迎消息 | 否 | - |
-| 13 | POST | `/api/submit-sensitive-info` | 提交公钥/对称密钥 | 是 | - |
-| 14 | GET | `/api/get-public-key` | 获取服务器公钥 | 是 | - |
+| 9 | POST | `/api/photos/upload` | 简单上传照片 | 是 | - |
+| 10 | POST | `/api/photos/init` | 初始化分块上传 | 是 | - |
+| 11 | POST | `/api/photos/chunk` | 上传分块 | 是 | - |
+| 12 | POST | `/api/photos/complete` | 完成分块上传 | 是 | - |
+| 13 | GET | `/api/photos/{id}` | 获取照片详情 | 是 | - |
+| 14 | GET | `/api/photos/{id}/file` | 下载照片文件 | 是 | - |
+| 15 | DELETE | `/api/photos/{id}` | 删除照片 | 是 | - |
+| 16 | GET | `/hello` | 欢迎消息 | 否 | - |
+| 17 | POST | `/api/submit-sensitive-info` | 提交公钥/密钥 | 是 | - |
+| 18 | GET | `/api/get-public-key` | 获取服务器公钥 | 是 | - |
+
+---
+
+## 七、测试
+
+测试脚本位于 `tests/test_api.sh`，使用 curl 进行 HTTP API 测试。
+
+### 运行测试
+
+```bash
+# 启动服务器
+./build/oat_quick_start &
+
+# 运行测试
+./tests/test_api.sh
+```
+
+### 测试用例
+
+| 测试项 | 端点 | 说明 |
+|--------|------|------|
+| 健康检查 | GET /health | 服务器状态 |
+| 登录 | POST /api/auth/login | admin/123456 |
+| 刷新 Token | POST /api/auth/refresh | 使用 refresh_token |
+| 用户列表 | GET /api/users | 需 admin 权限 |
+| 照片列表 | GET /api/photos | 获取照片 |
+| 简单上传 | POST /api/photos/upload | 上传文件 |
+| 分块上传 | POST /api/photos/init/chunk/complete | 分块上传流程 |
+| 照片详情 | GET /api/photos/{id} | 获取元数据 |
+| 删除照片 | DELETE /api/photos/{id} | 删除文件 |
+| 登出 | POST /api/auth/logout | 使 token 失效 |
+| 未授权访问 | - | 401/403 验证 |
