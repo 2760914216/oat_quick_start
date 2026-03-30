@@ -79,12 +79,21 @@ class UploadChunkResponseDto : public oatpp::DTO
     DTO_FIELD(Int32, chunkIndex); // 分块索引
 };
 
+class UploadCompleteRequestDto : public oatpp::DTO
+{
+    DTO_INIT(UploadCompleteRequestDto, DTO)
+    DTO_FIELD(String, token);
+    DTO_FIELD(String, filename);
+    DTO_FIELD(Int64, chunkCount);
+};
+
 class UploadCompleteResponseDto : public oatpp::DTO
 {
     DTO_INIT(UploadCompleteResponseDto, DTO)
     DTO_FIELD(String, fileId);  // 文件 ID
     DTO_FIELD(String, message); // 完成消息
 };
+
 /* TODO - Add more DTOs here */
 
 /* End DTO code-generation */

@@ -8,6 +8,8 @@
 #include "oatpp/macro/codegen.hpp"
 #include "oatpp/macro/component.hpp"
 #include "oatpp/web/server/api/ApiController.hpp"
+#include <oatpp/Environment.hpp>
+#include <oatpp/base/Log.hpp>
 
 #include OATPP_CODEGEN_BEGIN(ApiController)
 
@@ -54,6 +56,7 @@ public:
     ENDPOINT("POST", "/api/users", createUser, REQUEST(std::shared_ptr<oatpp::web::server::api::ApiController::IncomingRequest>, request),
              BODY_DTO(Object<CreateUserRequestDto>, body))
     {
+        OATPP_LOGd("ENDPOINT post /api/users", "ready to create a new user");
         auto authHeader = request->getHeader("Authorization");
         auto headerStr = std::string(authHeader->c_str());
         auto token = headerStr.substr(7);
@@ -68,7 +71,7 @@ public:
             error->message = "Admin access required";
             return createDtoResponse(Status::CODE_403, error);
         }
-
+        OATPP_LOGd("ENDPOINT post /api/users", "admin verified");
         auto username = body->username;
         auto password = body->password;
 
@@ -79,6 +82,7 @@ public:
             error->message = "Username and password are required";
             return createDtoResponse(Status::CODE_400, error);
         }
+        OATPP_LOGd("ENDPOINT post /api/users", "user profile valid");
 
         auto& authManager = auth::AuthManager::get();
 
@@ -89,6 +93,7 @@ public:
             error->message = "User already exists";
             return createDtoResponse(Status::CODE_409, error);
         }
+        OATPP_LOGd("ENDPOINT post /api/users", "user profile conflict");
 
         auto passwordHash = authManager.hash_password(password->c_str());
 

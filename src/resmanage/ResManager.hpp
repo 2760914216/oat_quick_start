@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -7,6 +8,7 @@
 #include <optional>
 #include <shared_mutex>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -174,8 +176,194 @@ public:
         return id;
     }
 
+    std::optional<bool> write_resource(ResourceType type, const std::string& filename, const std::vector<char>& data)
+    {
+        std::unique_lock lock(mutex_);
+        auto it = typePathMap_.find(type);
+        if (it == typePathMap_.end())
+        {
+            return std::nullopt;
+        }
+        fs::path fullPath = fs::path(it->second) / filename;
+        std::ofstream file(fullPath, std::ios::binary | std::ios::trunc);
+        if (!file.is_open())
+        {
+            return std::nullopt;
+        }
+        file.write(data.data(), data.size());
+        return file.good();
+    }
+
+    std::optional<bool> write_resource(ResourceType type, const std::string& filename, const std::string& data)
+    {
+        std::unique_lock lock(mutex_);
+        auto it = typePathMap_.find(type);
+        if (it == typePathMap_.end())
+        {
+            return std::nullopt;
+        }
+        fs::path fullPath = fs::path(it->second) / filename;
+        std::ofstream file(fullPath, std::ios::trunc);
+        if (!file.is_open())
+        {
+            return std::nullopt;
+        }
+        file.write(data.data(), data.size());
+        return file.good();
+    }
+
+    std::optional<bool> delete_resource(ResourceType type, const std::string& filename)
+    {
+        std::unique_lock lock(mutex_);
+        auto it = typePathMap_.find(type);
+        if (it == typePathMap_.end())
+        {
+            return std::nullopt;
+        }
+        fs::path fullPath = fs::path(it->second) / filename;
+        if (!fs::exists(fullPath))
+        {
+            return std::nullopt;
+        }
+        return fs::remove(fullPath);
+    }
+
+    std::string get_temp_path() const
+    {
+        std::shared_lock lock(mutex_);
+        return tempPath_;
+    }
+
+    bool create_temp_session(const std::string& session_id)
+    {
+        std::unique_lock lock(mutex_);
+        fs::path sessionDir = fs::path(tempPath_) / session_id;
+        if (fs::exists(sessionDir))
+        {
+            return false;
+        }
+        return fs::create_directories(sessionDir);
+    }
+
+    std::optional<bool> write_chunk(const std::string& session_id, int chunk_index, const std::vector<char>& data)
+    {
+        std::unique_lock lock(mutex_);
+        fs::path chunkPath = fs::path(tempPath_) / session_id / ("chunk_" + std::to_string(chunk_index));
+        std::ofstream file(chunkPath, std::ios::binary | std::ios::trunc);
+        if (!file.is_open())
+        {
+            return std::nullopt;
+        }
+        file.write(data.data(), data.size());
+        return file.good();
+    }
+
+    std::optional<bool> merge_chunks(const std::string& session_id, const std::string& output_path, int chunk_count)
+    {
+        std::unique_lock lock(mutex_);
+        std::ofstream outFile(output_path, std::ios::binary | std::ios::trunc);
+        if (!outFile.is_open())
+        {
+            return std::nullopt;
+        }
+
+        for (int i = 0; i < chunk_count; ++i)
+        {
+            fs::path chunkPath = fs::path(tempPath_) / session_id / ("chunk_" + std::to_string(i));
+            if (!fs::exists(chunkPath))
+            {
+                return std::nullopt;
+            }
+            std::ifstream chunkFile(chunkPath, std::ios::binary);
+            if (!chunkFile.is_open())
+            {
+                return std::nullopt;
+            }
+            outFile << chunkFile.rdbuf();
+            chunkFile.close();
+        }
+        outFile.close();
+        return fs::exists(output_path);
+    }
+
+    bool cleanup_session(const std::string& session_id)
+    {
+        std::unique_lock lock(mutex_);
+        fs::path sessionDir = fs::path(tempPath_) / session_id;
+        if (fs::exists(sessionDir))
+        {
+            return fs::remove_all(sessionDir) > 0;
+        }
+        return false;
+    }
+
+    void cleanup_expired_uploads(int max_age_hours = 24)
+    {
+        std::unique_lock lock(mutex_);
+        if (!fs::exists(tempPath_))
+        {
+            return;
+        }
+        auto now = std::chrono::system_clock::now();
+        for (const auto& entry : fs::directory_iterator(tempPath_))
+        {
+            if (!entry.is_directory())
+            {
+                continue;
+            }
+            auto mtime = fs::last_write_time(entry.path());
+            auto age = now - std::chrono::system_clock::from_time_t(std::chrono::duration_cast<std::chrono::seconds>(mtime.time_since_epoch()).count());
+            if (age > std::chrono::hours(max_age_hours))
+            {
+                fs::remove_all(entry.path());
+            }
+        }
+    }
+
+    void start_cleanup_thread(int interval_minutes = 60)
+    {
+        cleanupRunning_ = true;
+        cleanupThread_ = std::thread(
+            [this, interval_minutes]()
+            {
+                while (cleanupRunning_)
+                {
+                    std::this_thread::sleep_for(std::chrono::minutes(interval_minutes));
+                    if (cleanupRunning_)
+                    {
+                        cleanup_expired_uploads();
+                    }
+                }
+            });
+    }
+
+    void stop_cleanup_thread()
+    {
+        cleanupRunning_ = false;
+        if (cleanupThread_.joinable())
+        {
+            cleanupThread_.join();
+        }
+    }
+
+    int64_t get_file_size(ResourceType type, const std::string& filename)
+    {
+        std::shared_lock lock(mutex_);
+        auto it = typePathMap_.find(type);
+        if (it == typePathMap_.end())
+        {
+            return -1;
+        }
+        fs::path fullPath = fs::path(it->second) / filename;
+        if (!fs::exists(fullPath))
+        {
+            return -1;
+        }
+        return static_cast<int64_t>(fs::file_size(fullPath));
+    }
+
 private:
-    ResManager() : basePath_("res/")
+    ResManager() : basePath_("res/"), tempPath_("res/temp/"), cleanupRunning_(false)
     {
         std::unique_lock lock(mutex_);
         init_directories();
@@ -225,8 +413,11 @@ private:
     };
 
     std::string basePath_;
+    std::string tempPath_;
     std::unordered_map<ResourceType, std::string> typePathMap_;
     mutable std::shared_mutex mutex_;
+    std::atomic<bool> cleanupRunning_;
+    std::thread cleanupThread_;
 };
 
 } // namespace res

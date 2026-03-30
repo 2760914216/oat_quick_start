@@ -1,27 +1,29 @@
-.vscode/
+# misc
 src/encrypt/
-out/
 .clang-format
 next todo
 uploading recomandation.md
 ca/
 .gitignore
-CMakePresets.json
 opencode.jsonc
-.cache/
+storeref.md
 
 # Build
+out/
 build/
+.cache/
 cmake-build-*/
+CMakePresets.json
 
 # Test resources
 res/
 test_res/
 
 # IDE
+*~
 *.swp
 *.swo
-*~
+.vscode/
 
 # OS
 .DS_Store

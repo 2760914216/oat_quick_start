@@ -3,11 +3,14 @@ project(oat_quick_start VERSION 0.1.0 LANGUAGES C CXX)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 17)
 
-option(BUILD_TESTS "Build unit tests" OFF)
+option(BUILD_TESTS "Build unit tests" NO)
+option(BUILD_API_TESTS "Build HTTP API tests" NO)
 
 find_package(OpenSSL REQUIRED)
 find_package(oatpp          1.4.0 REQUIRED)
 find_package(oatpp-openssl  1.4.0 REQUIRED)
+find_package(oatpp-sqlite   1.4.0 REQUIRED)
+find_package(SQLite3 REQUIRED)
 
 if(BUILD_TESTS)
     find_package(GTest REQUIRED)
@@ -24,17 +27,24 @@ set(AUTH_SOURCES
     src/auth/TokenStore.cpp
 )
 
+set(STORAGE_SOURCES
+    src/db/PhotoMetadataDb.cpp
+)
+
 add_executable(oat_quick_start 
     src/App.cpp
     src/resmanage/ResManager.cpp
     ${AUTH_SOURCES}
+    ${STORAGE_SOURCES}
 )
 
 target_link_libraries(oat_quick_start 
     oatpp::oatpp
     oatpp::oatpp-openssl
+    oatpp::oatpp-sqlite
     ssl
     crypto
+    sqlite3
 )
 
 if(BUILD_TESTS)
@@ -51,4 +61,17 @@ if(BUILD_TESTS)
     
     enable_testing()
     add_test(NAME ResManagerTest COMMAND res_manager_test)
+endif()
+
+if(BUILD_API_TESTS)
+    add_executable(api_test 
+        tests/ApiTest.cpp
+    )
+    
+    target_link_libraries(api_test 
+        pthread
+    )
+    
+    message(STATUS "API tests enabled - run './tests/test_api.sh' to test HTTP endpoints")
+    message(STATUS "Note: Start server first with './build/oat_quick_start'")
 endif()
