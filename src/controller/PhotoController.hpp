@@ -1,17 +1,23 @@
 #pragma once
 
 #include "auth/JwtHelper.hpp"
+#include "classifier/ClassificationResult.hpp"
+#include "classifier/ClassifierManager.hpp"
 #include "db/PhotoMetadataDb.hpp"
 #include "dto/AuthDTOs.hpp"
 #include "dto/DTOs.hpp"
 #include "dto/PhotoDTOs.hpp"
+#include "image/ImageLoader.hpp"
 #include "resmanage/ResManager.hpp"
+#include "service/ImageEditor.hpp"
+#include "service/ThumbnailGenerator.hpp"
 
 #include "oatpp/macro/codegen.hpp"
 #include "oatpp/macro/component.hpp"
 #include "oatpp/web/server/api/ApiController.hpp"
 
 #include <chrono>
+#include <fstream>
 #include <sstream>
 
 #include OATPP_CODEGEN_BEGIN(ApiController)
@@ -163,6 +169,69 @@ public:
             errorResponse->error = "INTERNAL_ERROR";
             errorResponse->message = "Failed to save metadata";
             return createDtoResponse(Status::CODE_500, errorResponse);
+        }
+
+        // Auto-classification after upload
+        try
+        {
+            auto imageData = ImageLoader::load(metadata.filepath);
+            if (imageData)
+            {
+                auto& classifierMgr = ClassifierManager::getInstance();
+                auto sceneClassifier = classifierMgr.getClassifier("scene");
+                auto contentClassifier = classifierMgr.getClassifier("content");
+
+                if (sceneClassifier && contentClassifier)
+                {
+                    // Update status to processing
+                    metadata.classification_status = "processing";
+                    db::PhotoMetadataDb::get_instance().update_photo(metadata);
+
+                    // Run classification
+                    std::string sceneCategory = "unknown";
+                    std::string contentCategory = "unknown";
+
+                    if (sceneClassifier->isModelLoaded())
+                    {
+                        auto sceneResult = sceneClassifier->classify(*imageData);
+                        sceneCategory = sceneResult.category;
+                    }
+
+                    if (contentClassifier->isModelLoaded())
+                    {
+                        auto contentResult = contentClassifier->classify(*imageData);
+                        contentCategory = contentResult.category;
+                    }
+
+                    // Update with results
+                    metadata.scene_category = sceneCategory;
+                    metadata.content_category = contentCategory;
+                    metadata.classification_status = "completed";
+                    metadata.classified_at = std::string(get_current_timestamp()->c_str());
+                    db::PhotoMetadataDb::get_instance().update_photo(metadata);
+                }
+            }
+        }
+        catch (...)
+        {
+            // Classification failed, status remains pending
+        }
+
+        // Auto-generate thumbnails after upload
+        try
+        {
+            auto imageData = ImageLoader::load(metadata.filepath);
+            if (imageData)
+            {
+                // Generate list thumbnail (150x150)
+                auto listThumbId = ThumbnailGenerator::generateThumbnail(photoId, *imageData, "list");
+                // Generate detail thumbnail (400x400)
+                auto detailThumbId = ThumbnailGenerator::generateThumbnail(photoId, *imageData, "detail");
+            }
+        }
+        catch (...)
+        {
+            // Thumbnail generation failed, don't fail the upload
         }
 
         auto response = UploadResponseDto::createShared();
@@ -411,6 +480,123 @@ public:
         return response;
     }
 
+    ENDPOINT("GET", "/api/photos/{id}/thumbnail", getPhotoThumbnail, REQUEST(std::shared_ptr<oatpp::web::server::api::ApiController::IncomingRequest>, request),
+             PATH(String, id), QUERY(String, thumbSize))
+    {
+        auto payload = verify_auth(request);
+        if (!payload)
+        {
+            return createResponse(Status::CODE_401);
+        }
+
+        auto photoOpt = db::PhotoMetadataDb::get_instance().get_photo_by_id(std::string(id->c_str()));
+        if (!photoOpt)
+        {
+            auto errorResponse = ErrorResponseDto::createShared();
+            errorResponse->error = "NOT_FOUND";
+            errorResponse->message = "Photo not found";
+            return createDtoResponse(Status::CODE_404, errorResponse);
+        }
+
+        auto& photo = *photoOpt;
+        if (photo.owner != payload->username && payload->role != "admin")
+        {
+            auto errorResponse = ErrorResponseDto::createShared();
+            errorResponse->error = "FORBIDDEN";
+            errorResponse->message = "Access denied";
+            return createDtoResponse(Status::CODE_403, errorResponse);
+        }
+
+        std::string sizeType = "list";
+        if (thumbSize && !thumbSize->empty())
+        {
+            std::string s(thumbSize->c_str());
+            if (s == "list" || s == "detail")
+            {
+                sizeType = s;
+            }
+        }
+
+        auto existingThumbs = db::PhotoMetadataDb::get_instance().get_thumbnails_by_photo_id(photo.id);
+        std::optional<std::string> thumbPath;
+
+        for (const auto& thumb : existingThumbs)
+        {
+            if (thumb.size_type == sizeType)
+            {
+                thumbPath = thumb.thumbnail_path;
+                break;
+            }
+        }
+
+        if (!thumbPath)
+        {
+            auto imageData = ImageLoader::load(photo.filepath);
+            if (!imageData)
+            {
+                auto errorResponse = ErrorResponseDto::createShared();
+                errorResponse->error = "INTERNAL_ERROR";
+                errorResponse->message = "Failed to load image";
+                return createDtoResponse(Status::CODE_500, errorResponse);
+            }
+
+            auto thumbId = ThumbnailGenerator::generateThumbnail(photo.id, *imageData, sizeType);
+            if (!thumbId)
+            {
+                auto errorResponse = ErrorResponseDto::createShared();
+                errorResponse->error = "INTERNAL_ERROR";
+                errorResponse->message = "Failed to generate thumbnail";
+                return createDtoResponse(Status::CODE_500, errorResponse);
+            }
+
+            auto newThumbs = db::PhotoMetadataDb::get_instance().get_thumbnails_by_photo_id(photo.id);
+            for (const auto& thumb : newThumbs)
+            {
+                if (thumb.size_type == sizeType)
+                {
+                    thumbPath = thumb.thumbnail_path;
+                    break;
+                }
+            }
+        }
+
+        if (!thumbPath)
+        {
+            auto errorResponse = ErrorResponseDto::createShared();
+            errorResponse->error = "INTERNAL_ERROR";
+            errorResponse->message = "Thumbnail not found";
+            return createDtoResponse(Status::CODE_500, errorResponse);
+        }
+
+        std::ifstream file(*thumbPath, std::ios::binary | std::ios::ate);
+        if (!file)
+        {
+            auto errorResponse = ErrorResponseDto::createShared();
+            errorResponse->error = "NOT_FOUND";
+            errorResponse->message = "Thumbnail file not found";
+            return createDtoResponse(Status::CODE_404, errorResponse);
+        }
+
+        file.seekg(0, std::ios::end);
+        std::streamsize fileSize = file.tellg();
+        file.seekg(0, std::ios::beg);
+
+        std::vector<char> buffer(fileSize);
+        if (!file.read(buffer.data(), fileSize))
+        {
+            auto errorResponse = ErrorResponseDto::createShared();
+            errorResponse->error = "INTERNAL_ERROR";
+            errorResponse->message = "Failed to read thumbnail";
+            return createDtoResponse(Status::CODE_500, errorResponse);
+        }
+
+        std::string bodyData(buffer.begin(), buffer.end());
+        auto response = createResponse(Status::CODE_200, bodyData.c_str());
+        response->putHeader("Content-Type", "image/jpeg");
+        response->putHeader("Content-Length", std::to_string(fileSize));
+        return response;
+    }
+
     ENDPOINT("DELETE", "/api/photos/{id}", deletePhoto, REQUEST(std::shared_ptr<oatpp::web::server::api::ApiController::IncomingRequest>, request),
              PATH(String, id))
     {
@@ -444,6 +630,362 @@ public:
 
         auto response = DeleteResponseDto::createShared();
         response->message = "Photo deleted successfully";
+        return createDtoResponse(Status::CODE_200, response);
+    }
+
+    ENDPOINT("GET", "/api/photos/{id}/classification", getPhotoClassification,
+             REQUEST(std::shared_ptr<oatpp::web::server::api::ApiController::IncomingRequest>, request), PATH(String, id))
+    {
+        auto payload = verify_auth(request);
+        if (!payload)
+        {
+            return createResponse(Status::CODE_401);
+        }
+
+        auto photoOpt = db::PhotoMetadataDb::get_instance().get_photo_by_id(std::string(id->c_str()));
+        if (!photoOpt)
+        {
+            auto errorResponse = ErrorResponseDto::createShared();
+            errorResponse->error = "NOT_FOUND";
+            errorResponse->message = "Photo not found";
+            return createDtoResponse(Status::CODE_404, errorResponse);
+        }
+
+        auto& photo = *photoOpt;
+        if (photo.owner != payload->username && payload->role != "admin")
+        {
+            auto errorResponse = ErrorResponseDto::createShared();
+            errorResponse->error = "FORBIDDEN";
+            errorResponse->message = "Access denied";
+            return createDtoResponse(Status::CODE_403, errorResponse);
+        }
+
+        if (photo.classification_status == "pending" || photo.classification_status == "processing")
+        {
+            auto response = ClassificationStatusDto::createShared();
+            response->photo_id = photo.id.c_str();
+            response->status = photo.classification_status.c_str();
+            return createDtoResponse(Status::CODE_200, response);
+        }
+        else if (photo.classification_status == "completed")
+        {
+            auto response = ClassificationResultDto::createShared();
+            response->photo_id = photo.id.c_str();
+            response->scene_category = photo.scene_category.c_str();
+            response->content_category = photo.content_category.c_str();
+            response->confidence = 0.95f;
+            response->classified_at = photo.classified_at.c_str();
+            return createDtoResponse(Status::CODE_200, response);
+        }
+        else if (photo.classification_status == "failed")
+        {
+            auto response = ClassificationStatusDto::createShared();
+            response->photo_id = photo.id.c_str();
+            response->status = "failed";
+            return createDtoResponse(Status::CODE_200, response);
+        }
+
+        auto response = ClassificationStatusDto::createShared();
+        response->photo_id = photo.id.c_str();
+        response->status = "pending";
+        return createDtoResponse(Status::CODE_200, response);
+    }
+
+    ENDPOINT("POST", "/api/photos/{id}/classify", classifyPhoto, REQUEST(std::shared_ptr<oatpp::web::server::api::ApiController::IncomingRequest>, request),
+             PATH(String, id), BODY_DTO(Object<ClassifyRequestDto>, req))
+    {
+        auto payload = verify_auth(request);
+        if (!payload)
+        {
+            return createResponse(Status::CODE_401);
+        }
+
+        auto photoOpt = db::PhotoMetadataDb::get_instance().get_photo_by_id(std::string(id->c_str()));
+        if (!photoOpt)
+        {
+            auto errorResponse = ErrorResponseDto::createShared();
+            errorResponse->error = "NOT_FOUND";
+            errorResponse->message = "Photo not found";
+            return createDtoResponse(Status::CODE_404, errorResponse);
+        }
+
+        auto& photo = *photoOpt;
+        if (photo.owner != payload->username && payload->role != "admin")
+        {
+            auto errorResponse = ErrorResponseDto::createShared();
+            errorResponse->error = "FORBIDDEN";
+            errorResponse->message = "Access denied";
+            return createDtoResponse(Status::CODE_403, errorResponse);
+        }
+
+        bool forceClassify = req->force && req->force;
+
+        if (!forceClassify && photo.classification_status == "completed")
+        {
+            auto response = ClassificationResultDto::createShared();
+            response->photo_id = photo.id.c_str();
+            response->scene_category = photo.scene_category.c_str();
+            response->content_category = photo.content_category.c_str();
+            response->confidence = 0.95f;
+            response->classified_at = photo.classified_at.c_str();
+            return createDtoResponse(Status::CODE_200, response);
+        }
+
+        db::PhotoMetadata updateMeta;
+        updateMeta.id = photo.id;
+        updateMeta.classification_status = "processing";
+        db::PhotoMetadataDb::get_instance().update_photo(updateMeta);
+
+        auto imageData = ImageLoader::load(photo.filepath);
+        if (!imageData)
+        {
+            db::PhotoMetadata failedMeta;
+            failedMeta.id = photo.id;
+            failedMeta.classification_status = "failed";
+            db::PhotoMetadataDb::get_instance().update_photo(failedMeta);
+
+            auto errorResponse = ErrorResponseDto::createShared();
+            errorResponse->error = "INTERNAL_ERROR";
+            errorResponse->message = "Failed to load image";
+            return createDtoResponse(Status::CODE_500, errorResponse);
+        }
+
+        auto& classifierMgr = ClassifierManager::getInstance();
+
+        std::string sceneCategory;
+        std::string contentCategory;
+        float confidence = 0.0f;
+
+        auto sceneClassifier = classifierMgr.getClassifier("scene");
+        if (sceneClassifier && sceneClassifier->isModelLoaded())
+        {
+            auto sceneResult = sceneClassifier->classify(*imageData);
+            sceneCategory = sceneResult.category;
+            confidence = sceneResult.confidence;
+        }
+
+        auto contentClassifier = classifierMgr.getClassifier("content");
+        if (contentClassifier && contentClassifier->isModelLoaded())
+        {
+            auto contentResult = contentClassifier->classify(*imageData);
+            contentCategory = contentResult.category;
+            if (contentResult.confidence > confidence)
+            {
+                confidence = contentResult.confidence;
+            }
+        }
+
+        if (sceneCategory.empty()) sceneCategory = "unknown";
+        if (contentCategory.empty()) contentCategory = "unknown";
+
+        std::string timestamp = std::string(get_current_timestamp()->c_str());
+
+        db::PhotoMetadata completedMeta;
+        completedMeta.id = photo.id;
+        completedMeta.scene_category = sceneCategory;
+        completedMeta.content_category = contentCategory;
+        completedMeta.classification_status = "completed";
+        completedMeta.classified_at = timestamp;
+        db::PhotoMetadataDb::get_instance().update_photo(completedMeta);
+
+        auto response = ClassificationResultDto::createShared();
+        response->photo_id = photo.id.c_str();
+        response->scene_category = sceneCategory.c_str();
+        response->content_category = contentCategory.c_str();
+        response->confidence = confidence;
+        response->classified_at = timestamp.c_str();
+        return createDtoResponse(Status::CODE_200, response);
+    }
+
+    ENDPOINT("POST", "/api/photos/{id}/edit", editPhoto, REQUEST(std::shared_ptr<oatpp::web::server::api::ApiController::IncomingRequest>, request),
+             PATH(String, id))
+    {
+        auto payload = verify_auth(request);
+        if (!payload)
+        {
+            return createResponse(Status::CODE_401);
+        }
+
+        auto photoOpt = db::PhotoMetadataDb::get_instance().get_photo_by_id(std::string(id->c_str()));
+        if (!photoOpt)
+        {
+            auto errorResponse = ErrorResponseDto::createShared();
+            errorResponse->error = "NOT_FOUND";
+            errorResponse->message = "Photo not found";
+            return createDtoResponse(Status::CODE_404, errorResponse);
+        }
+
+        auto& photo = *photoOpt;
+        if (photo.owner != payload->username && payload->role != "admin")
+        {
+            auto errorResponse = ErrorResponseDto::createShared();
+            errorResponse->error = "FORBIDDEN";
+            errorResponse->message = "Access denied";
+            return createDtoResponse(Status::CODE_403, errorResponse);
+        }
+
+        auto bodyStream = std::make_shared<oatpp::data::stream::BufferOutputStream>();
+        request->transferBodyToStream(bodyStream);
+        auto bodyData = bodyStream->toString();
+
+        std::string jsonStr(bodyData->c_str(), bodyData->size());
+        auto editParamsOpt = ImageEditor::fromJson(jsonStr);
+        if (!editParamsOpt)
+        {
+            auto errorResponse = ErrorResponseDto::createShared();
+            errorResponse->error = "BAD_REQUEST";
+            errorResponse->message = "Invalid edit parameters JSON";
+            return createDtoResponse(Status::CODE_400, errorResponse);
+        }
+
+        auto normalizedParams = *editParamsOpt;
+        if (normalizedParams.brightness < -20) normalizedParams.brightness = -20;
+        if (normalizedParams.brightness > 20) normalizedParams.brightness = 20;
+        if (normalizedParams.contrast < 0.5f) normalizedParams.contrast = 0.5f;
+        if (normalizedParams.contrast > 2.0f) normalizedParams.contrast = 2.0f;
+        if (normalizedParams.rotation != 0 && normalizedParams.rotation != 90 && normalizedParams.rotation != 180 && normalizedParams.rotation != 270)
+        {
+            normalizedParams.rotation = 0;
+        }
+
+        std::string editJson = ImageEditor::toJson(normalizedParams);
+        std::string timestamp = std::string(get_current_timestamp()->c_str());
+
+        db::PhotoEdit edit;
+        edit.id = photo.id + "_edit";
+        edit.photo_id = photo.id;
+        edit.edit_params = editJson;
+        edit.created_at = timestamp;
+        edit.updated_at = timestamp;
+
+        if (!db::PhotoMetadataDb::get_instance().insert_edit(edit))
+        {
+            auto errorResponse = ErrorResponseDto::createShared();
+            errorResponse->error = "INTERNAL_ERROR";
+            errorResponse->message = "Failed to save edit parameters";
+            return createDtoResponse(Status::CODE_500, errorResponse);
+        }
+
+        auto response = EditResponseDto::createShared();
+        response->photo_id = photo.id.c_str();
+        response->edit_params = editJson.c_str();
+        response->created_at = timestamp.c_str();
+        return createDtoResponse(Status::CODE_200, response);
+    }
+
+    ENDPOINT("GET", "/api/photos/{id}/edit", getPhotoEdit, REQUEST(std::shared_ptr<oatpp::web::server::api::ApiController::IncomingRequest>, request),
+             PATH(String, id))
+    {
+        auto payload = verify_auth(request);
+        if (!payload)
+        {
+            return createResponse(Status::CODE_401);
+        }
+
+        auto photoOpt = db::PhotoMetadataDb::get_instance().get_photo_by_id(std::string(id->c_str()));
+        if (!photoOpt)
+        {
+            auto errorResponse = ErrorResponseDto::createShared();
+            errorResponse->error = "NOT_FOUND";
+            errorResponse->message = "Photo not found";
+            return createDtoResponse(Status::CODE_404, errorResponse);
+        }
+
+        auto& photo = *photoOpt;
+        if (photo.owner != payload->username && payload->role != "admin")
+        {
+            auto errorResponse = ErrorResponseDto::createShared();
+            errorResponse->error = "FORBIDDEN";
+            errorResponse->message = "Access denied";
+            return createDtoResponse(Status::CODE_403, errorResponse);
+        }
+
+        auto editOpt = db::PhotoMetadataDb::get_instance().get_edit_by_photo_id(photo.id);
+        auto response = EditParamsResponseDto::createShared();
+
+        if (editOpt)
+        {
+            auto editParams = *editOpt;
+            auto editParamsObj = ImageEditor::fromJson(editParams.edit_params);
+            if (editParamsObj)
+            {
+                auto dtoParams = EditRequestDto::createShared();
+                dtoParams->cropX = editParamsObj->cropX;
+                dtoParams->cropY = editParamsObj->cropY;
+                dtoParams->cropWidth = editParamsObj->cropWidth;
+                dtoParams->cropHeight = editParamsObj->cropHeight;
+                dtoParams->rotation = editParamsObj->rotation;
+                dtoParams->targetWidth = editParamsObj->targetWidth;
+                dtoParams->targetHeight = editParamsObj->targetHeight;
+                dtoParams->brightness = editParamsObj->brightness;
+                dtoParams->contrast = editParamsObj->contrast;
+
+                auto filterStr = std::string();
+                switch (editParamsObj->filter)
+                {
+                case EditParams::Filter::NONE:
+                    filterStr = "NONE";
+                    break;
+                case EditParams::Filter::GRAYSCALE:
+                    filterStr = "GRAYSCALE";
+                    break;
+                case EditParams::Filter::SEPIA:
+                    filterStr = "SEPIA";
+                    break;
+                case EditParams::Filter::VINTAGE:
+                    filterStr = "VINTAGE";
+                    break;
+                default:
+                    filterStr = "NONE";
+                    break;
+                }
+                dtoParams->filter = filterStr.c_str();
+                response->edit_params = dtoParams;
+            }
+            else
+            {
+                response->edit_params = nullptr;
+            }
+        }
+        else
+        {
+            response->edit_params = nullptr;
+        }
+
+        return createDtoResponse(Status::CODE_200, response);
+    }
+
+    ENDPOINT("POST", "/api/photos/{id}/revert", revertPhotoEdit, REQUEST(std::shared_ptr<oatpp::web::server::api::ApiController::IncomingRequest>, request),
+             PATH(String, id))
+    {
+        auto payload = verify_auth(request);
+        if (!payload)
+        {
+            return createResponse(Status::CODE_401);
+        }
+
+        auto photoOpt = db::PhotoMetadataDb::get_instance().get_photo_by_id(std::string(id->c_str()));
+        if (!photoOpt)
+        {
+            auto errorResponse = ErrorResponseDto::createShared();
+            errorResponse->error = "NOT_FOUND";
+            errorResponse->message = "Photo not found";
+            return createDtoResponse(Status::CODE_404, errorResponse);
+        }
+
+        auto& photo = *photoOpt;
+        if (photo.owner != payload->username && payload->role != "admin")
+        {
+            auto errorResponse = ErrorResponseDto::createShared();
+            errorResponse->error = "FORBIDDEN";
+            errorResponse->message = "Access denied";
+            return createDtoResponse(Status::CODE_403, errorResponse);
+        }
+
+        db::PhotoMetadataDb::get_instance().delete_edit(photo.id);
+
+        auto response = RevertResponseDto::createShared();
+        response->success = true;
         return createDtoResponse(Status::CODE_200, response);
     }
 

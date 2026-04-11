@@ -1,0 +1,50 @@
+{
+  "active_plan": "/home/ruruka/文档/srccode/oat_quick_start/.sisyphus/plans/image-classification-backend.md",
+  "started_at": "2026-04-11T06:01:29.730Z",
+  "session_ids": [
+    "ses_284de728effeFNvzeaq4b5DvRb",
+    "ses_284dd645cffeGfNPlKHc6ULln9",
+    "ses_284da3552ffeKbrCW1V0UVtVng",
+    "ses_284d7f0c9ffenHEWA6rNRzFw2Y",
+    "ses_284d60b94ffefxtksRXipG29BW",
+    "ses_284d4f24dffedr4RNrIUQqA7uy",
+    "ses_284d323d3ffeRVgAPF1XpSJCDt",
+    "ses_284d01a45ffeiyEPThJ0dRfdyl",
+    "ses_284c8c9aeffek8ZGmdhqCZt1tM",
+    "ses_284c714c0ffeCr9V9nPUoQJO0R",
+    "ses_284c60800ffeGtd65bqMj2OaF0",
+    "ses_284c4d163ffezLZaj5g2tfxYee",
+    "ses_284c3da75ffe8oPuZXLzAfyOZM",
+    "ses_284c1b32dffe3yCPXNgpJWw052",
+    "ses_284c059a7ffePT9GTDGeJx4QvP",
+    "ses_284bda35affeJuYmwGMAy0lajw",
+    "ses_284bc1064fferot9ifAYzqngE6",
+    "ses_284b93ef0ffeS7An0G16jZ4H2H",
+    "ses_284b79c50ffedl8DYVbJNYy7tq",
+    "ses_284b4e4baffer0CKI7lfoErGd3",
+    "ses_284b29961ffeYoovMKllGGR5rZ",
+    "ses_284b23977ffe5xLh7ilZ39nlVO",
+    "ses_284b09270ffeorVYjmzGUSjo1g",
+    "ses_284aeb00bffeWsqSgoo9HefFRq",
+    "ses_284aadbb2ffef8Whfw0g0F70Qk",
+    "ses_284a9f8b3ffejEvFjLfK35msoC",
+    "ses_284a5709dffebZhadV2Pe9YOhW",
+    "ses_284a3f02affeZUD55H36stIZnS",
+    "ses_284a1c8c6ffeN4gMqUDCXuXoCL",
+    "ses_2849f5bc0ffeD0Fmg735E8aeez",
+    "ses_2849a38ccffewW3M9c7tqRZa5q"
+  ],
+  "plan_name": "image-classification-backend",
+  "agent": "atlas",
+  "task_sessions": {
+    "final-wave:f1": {
+      "task_key": "final-wave:f1",
+      "task_label": "F1",
+      "task_title": "**Plan Compliance Audit** - 验证所有 31 个子任务完成度",
+      "session_id": "ses_2849a38ccffewW3M9c7tqRZa5q",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-04-11T07:21:26.093Z"
+    }
+  }
+}

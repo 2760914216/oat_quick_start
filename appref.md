@@ -53,8 +53,7 @@
 {
   "username": "string",
   "password": "string"
-}
-```
+}```
 | **成功响应** | `200 OK` |
 | **响应体** | `LoginResponseDto` |
 | **响应示例** | `{"access_token": "jwt...", "refresh_token": "jwt...", "expires_in": 3600, "username": "admin", "role": "admin"}` |
@@ -75,8 +74,7 @@
 | ```json
 {
   "refresh_token": "string"
-}
-```
+}```
 | **成功响应** | `200 OK` |
 | **响应体** | `RefreshResponseDto` |
 | **响应示例** | `{"access_token": "jwt...", "expires_in": 3600}` |
@@ -134,8 +132,7 @@
 {
   "username": "string",
   "password": "string"
-}
-```
+}```
 | **成功响应** | `201 Created` |
 | **响应体** | `UserDto` |
 | **响应示例** | `{"username": "newuser", "created_at": null}` |
@@ -261,8 +258,7 @@
   "token": "session_id",
   "filename": "photo.jpg",
   "chunkCount": 10
-}
-```
+}```
 | **成功响应** | `200 OK` |
 | **响应体** | `UploadCompleteResponseDto` |
 | **响应示例** | `{"fileId": "123456_7890", "message": "Upload completed successfully"}` |
